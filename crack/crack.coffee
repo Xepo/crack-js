@@ -47,15 +47,18 @@ class Block
           @limeobj.setPosition(@world.translatex(@x), @world.translatey(@y))
           @limeobj.setSize @world.blocksizex, @world.blocksizey
 
+          @setColor(@color)
+          @world.appendChild @limeobj
+
+     setColor: (@color) ->
           [redC,greenC,blueC] = colors[@color]
           @limeobj.setFill redC,greenC,blueC
-          @world.appendChild @limeobj
 
      move: (@x,@y) ->
           @limeobj.setPosition(@world.translatex(@x), @world.translatey(@y))
 
      matches: (other) ->
-          other.color != blankColor and @color != blankColor and (other.color == @color)
+          not other.isEmpty() and not @isEmpty() and (other.color == @color)
 
      isEmpty: ->
           @color == blankColor
@@ -99,32 +102,50 @@ class Board
           (new Block(@world, emptyColor, x, y) for x in [0..@world.width])
 
      swap: (x1=@selection.x,y1=@selection.y,x2=@selection.x+1,y2=@selection.y) ->
+          if x1 == y1 and x2 == y2
+               return
           @grid[y1][x1].move(x2, y2)
           @grid[y2][x2].move(x1, y1)
           [@grid[y1][x1], @grid[y2][x2]] = [@grid[y2][x2], @grid[y1][x1]]
 
-     fall: (x,y) ->
-          if y < @world.height
-               if @grid[y+1][x].isEmpty()
-                    @swap(x,y, x,y+1)
-                    @fall x, y+1
-
+     fall: (x) ->
+          moveTo = @world.height
+          for y in [@world.height..0]
+               if not @grid[y][x].isEmpty()
+                    @swap x,y,x,moveTo--
 
      play_move: (x,y) ->
           @selection.set(@selection.x + x, @selection.y + y)
      play_swap: ->
           @swap()
-          @fall(@selection.x, @selection.y)
-          @fall(@selection.x+1, @selection.y)
+          @fall(@selection.x)
+          @fall(@selection.x+1)
+          @checkForMatch()
 
-     checkForMatch: (x,y) ->
-          false
-
-
-
+     matches: (x1,y1,x2,y2,x3,y3) ->
+          @grid[y1][x1].matches(@grid[y2][x2]) and @grid[y1][x1].matches(@grid[y3][x3])
 
 
+     checkForMatch: ->
+          matchGrid = ((false for x in [0..@world.width]) for y in [0..@world.height])
+          for x in [0..@world.width]
+               for y in [0..@world.height]
+                    if x - 2 >= 0 and @matches(x,y,x-1,y,x-2,y)
+                         matchGrid[y][x-ax] = true for ax in [0..2]
+                    if y - 2 >= 0 and @matches(x,y,x,y-1,x,y-2)
+                         matchGrid[y-ay][x] = true for ay in [0..2]
+          console.log matchGrid
 
+          changed = false
+          for x in [0..@world.width]
+               for y in [0..@world.height]
+                    if matchGrid[y][x]
+                         changed = true
+                         @grid[y][x].setColor(blankColor)
+          for x in [0..@world.width]
+               @fall x,y-1
+          if changed
+               @checkForMatch()
 
 crack.start = ->
      color_for_selected = new lime.fill.Color(0x808080)
