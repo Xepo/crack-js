@@ -15,11 +15,12 @@ colors =
      red: [255,0,0]
      green: [0,255,0]
      blue: [0,0,255]
+     empty: [255,255,255]
 
-blankColor = [255,255,255]
+blankColor = "empty"
 colorKeys = (key for key, value of colors)
 randomColor = () ->
-          colorKeys[Math.floor(Math.random()*3)]
+          colorKeys[Math.floor(Math.random()*4)]
 
 class World
      constructor: (@scene, @width=6, @height=10) ->
@@ -38,6 +39,8 @@ class World
      appendChild: (child) ->
           @target.appendChild child
 
+
+
 class Block
      constructor: (@world, @color, @x,@y) ->
           @limeobj = new lime.Sprite().setAnchorPoint(0,0)
@@ -54,6 +57,8 @@ class Block
      matches: (other) ->
           other.color != blankColor and @color != blankColor and (other.color == @color)
 
+     isEmpty: ->
+          @color == blankColor
 
 
 
@@ -70,7 +75,6 @@ class Selection
           @limeobj.addPoints(l,t, r,t, r,b, l,b, l,t, m,t, m,b, l,b)
           @limeobj.setStroke(2, 'rgb(0,0,0)')
           @world.appendChild @limeobj
-          console.log "SEelcted"
 
      set: (x,y) ->
           if x >= 0 and x < @world.width and y >= 0 and y <= @world.height
@@ -91,12 +95,27 @@ class Board
      randomRow: (y) ->
           (new Block(@world, randomColor(), x, y) for x in [0..@world.width])
 
-     move: (x,y) ->
-          @selection.set(@selection.x + x, @selection.y + y)
+     emptyRow: (y) ->
+          (new Block(@world, emptyColor, x, y) for x in [0..@world.width])
 
-     swap: (x=@selection.x,y=@selection.y) ->
-          @grid[y][x+ax].move(x + (1 - ax), y) for ax in [0..1]
-          [@grid[y][x], @grid[y][x+1]] = [@grid[y][x+1], @grid[y][x]]
+     swap: (x1=@selection.x,y1=@selection.y,x2=@selection.x+1,y2=@selection.y) ->
+          @grid[y1][x1].move(x2, y2)
+          @grid[y2][x2].move(x1, y1)
+          [@grid[y1][x1], @grid[y2][x2]] = [@grid[y2][x2], @grid[y1][x1]]
+
+     fall: (x,y) ->
+          if y < @world.height
+               if @grid[y+1][x].isEmpty()
+                    @swap(x,y, x,y+1)
+                    @fall x, y+1
+
+
+     play_move: (x,y) ->
+          @selection.set(@selection.x + x, @selection.y + y)
+     play_swap: ->
+          @swap()
+          @fall(@selection.x, @selection.y)
+          @fall(@selection.x+1, @selection.y)
 
      checkForMatch: (x,y) ->
           false
@@ -120,15 +139,15 @@ crack.start = ->
      goog.events.listen(document, ['keydown'], ((e) ->
           switch e.keyCode
                when (goog.events.KeyCodes.LEFT), goog.events.KeyCodes.A
-                    board.move(-1,0)
+                    board.play_move(-1,0)
                when goog.events.KeyCodes.RIGHT, goog.events.KeyCodes.D
-                    board.move(1,0)
+                    board.play_move(1,0)
                when goog.events.KeyCodes.DOWN, goog.events.KeyCodes.S
-                    board.move(0,1)
+                    board.play_move(0,1)
                when goog.events.KeyCodes.UP, goog.events.KeyCodes.W
-                    board.move(0,-1)
+                    board.play_move(0,-1)
                when goog.events.KeyCodes.SPACE, goog.events.KeyCodes.K
-                    board.swap()
+                    board.play_swap()
      ))
      
      director.replaceScene scene
