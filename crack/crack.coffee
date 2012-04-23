@@ -1,6 +1,7 @@
 goog.provide "crack"
 goog.require "goog.events.KeyCodes"
 goog.require "lime.Director"
+goog.require "lime.Polygon"
 goog.require "lime.Scene"
 goog.require "lime.Layer"
 goog.require "lime.Circle"
@@ -15,6 +16,7 @@ colors =
      green: [0,255,0]
      blue: [0,0,255]
 
+blankColor = [255,255,255]
 colorKeys = (key for key, value of colors)
 randomColor = () ->
           colorKeys[Math.floor(Math.random()*3)]
@@ -27,10 +29,6 @@ class World
           @blocksizex = @pxwidth / @width
           @blocksizey = @pxheight / @height
           @scene.appendChild @target
-
-          color_for_selected = new lime.fill.Color(100,100,100)
-          @stroke_for_selected = new lime.fill.Stroke(200, color_for_selected)
-          @normal_stroke = new lime.fill.Stroke(0, new lime.fill.Color(255,255,255))
 
      translatex: (x) ->
           x * @blocksizex
@@ -50,49 +48,60 @@ class Block
           @limeobj.setFill redC,greenC,blueC
           @world.appendChild @limeobj
 
-     setSelected: (b) ->
-          if b
-               @limeobj.setStroke(3, 'rgb(50,50,50)')
-          else
-               @limeobj.setStroke null
-
      move: (@x,@y) ->
           @limeobj.setPosition(@world.translatex(@x), @world.translatey(@y))
 
+     matches: (other) ->
+          other.color != blankColor and @color != blankColor and (other.color == @color)
 
 
+
+
+
+class Selection
+     constructor: (@world, @x=0,@y=0) ->
+          @limeobj = new lime.Polygon()
+          l = 0
+          m = @world.blocksizex
+          r = @world.blocksizex*2
+          t = 0
+          b = @world.blocksizey
+
+          @limeobj.addPoints(l,t, r,t, r,b, l,b, l,t, m,t, m,b, l,b)
+          @limeobj.setStroke(2, 'rgb(0,0,0)')
+          @world.appendChild @limeobj
+          console.log "SEelcted"
+
+     set: (x,y) ->
+          if x >= 0 and x < @world.width and y >= 0 and y <= @world.height
+               @x = x
+               @y = y
+               @limeobj.setPosition @world.translatex(x),@world.translatey(y)
 
 
 
 
 class Board
+     constructor: (@world) ->
+          @grid = (@randomRow(y) for y in [0..@world.height])
+          @selection = new Selection(@world)
+          @selection.set(0,@world.height)
+          console.log "Constructed"
+
      randomRow: (y) ->
           (new Block(@world, randomColor(), x, y) for x in [0..@world.width])
 
-     setSelection: (x,y) ->
-          if x >= 0 and x < @world.width and y >= 0 and y <= @world.height
-               @grid[@selectedy][sx].setSelected(false) for sx in [@selectedx..@selectedx+1]
-               @selectedx = x
-               @selectedy = y
-               @grid[@selectedy][sx].setSelected(true) for sx in [@selectedx..@selectedx+1]
-
-     constructor: (@world) ->
-          @grid = (@randomRow(y) for y in [0..@world.height])
-          @selectedx = 0
-          @selectedy = 0
-          @setSelection(0,0)
-          console.log "Constructed"
-
      move: (x,y) ->
-          @setSelection(@selectedx + x, @selectedy + y)
+          @selection.set(@selection.x + x, @selection.y + y)
 
-     swap: (x=@selectedx,y=@selectedy) ->
-          @grid[y][sx].setSelected(false) for sx in [x..x+1]
+     swap: (x=@selection.x,y=@selection.y) ->
           @grid[y][x+ax].move(x + (1 - ax), y) for ax in [0..1]
-          tmp = @grid[y][x]
-          @grid[y][x] = @grid[y][x+1]
-          @grid[y][x+1] = tmp
-          @grid[y][sx].setSelected(true) for sx in [x..x+1]
+          [@grid[y][x], @grid[y][x+1]] = [@grid[y][x+1], @grid[y][x]]
+
+     checkForMatch: (x,y) ->
+          false
+
+
 
 
 
