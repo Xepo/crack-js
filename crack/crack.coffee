@@ -56,6 +56,9 @@ class Block
           else
                @limeobj.setStroke null
 
+     move: (@x,@y) ->
+          @limeobj.setPosition(@world.translatex(@x), @world.translatey(@y))
+
 
 
 
@@ -68,12 +71,10 @@ class Board
 
      setSelection: (x,y) ->
           if x >= 0 and x < @world.width and y >= 0 and y <= @world.height
-               @grid[@selectedy][@selectedx].setSelected(false)
-               @grid[@selectedy][@selectedx+1].setSelected(false)
+               @grid[@selectedy][sx].setSelected(false) for sx in [@selectedx..@selectedx+1]
                @selectedx = x
                @selectedy = y
-               @grid[@selectedy][@selectedx].setSelected(true)
-               @grid[@selectedy][@selectedx+1].setSelected(true)
+               @grid[@selectedy][sx].setSelected(true) for sx in [@selectedx..@selectedx+1]
 
      constructor: (@world) ->
           @grid = (@randomRow(y) for y in [0..@world.height])
@@ -84,6 +85,16 @@ class Board
 
      move: (x,y) ->
           @setSelection(@selectedx + x, @selectedy + y)
+
+     swap: (x=@selectedx,y=@selectedy) ->
+          @grid[y][sx].setSelected(false) for sx in [x..x+1]
+          @grid[y][x+ax].move(x + (1 - ax), y) for ax in [0..1]
+          tmp = @grid[y][x]
+          @grid[y][x] = @grid[y][x+1]
+          @grid[y][x+1] = tmp
+          @grid[y][sx].setSelected(true) for sx in [x..x+1]
+
+
 
 
 
@@ -106,6 +117,8 @@ crack.start = ->
                board.move(0,1)
           if (e.keyCode == goog.events.KeyCodes.UP)
                board.move(0,-1)
+          if (e.keyCode == goog.events.KeyCodes.SPACE)
+               board.swap()
      ))
      
      director.replaceScene scene
