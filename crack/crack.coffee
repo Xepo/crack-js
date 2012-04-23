@@ -118,16 +118,17 @@ crack.start = ->
      board = new Board(world)
 
      goog.events.listen(document, ['keydown'], ((e) ->
-          if (e.keyCode == goog.events.KeyCodes.LEFT)
-               board.move(-1,0)
-          if (e.keyCode == goog.events.KeyCodes.RIGHT)
-               board.move(1,0)
-          if (e.keyCode == goog.events.KeyCodes.DOWN)
-               board.move(0,1)
-          if (e.keyCode == goog.events.KeyCodes.UP)
-               board.move(0,-1)
-          if (e.keyCode == goog.events.KeyCodes.SPACE)
-               board.swap()
+          switch e.keyCode
+               when (goog.events.KeyCodes.LEFT), goog.events.KeyCodes.A
+                    board.move(-1,0)
+               when goog.events.KeyCodes.RIGHT, goog.events.KeyCodes.D
+                    board.move(1,0)
+               when goog.events.KeyCodes.DOWN, goog.events.KeyCodes.S
+                    board.move(0,1)
+               when goog.events.KeyCodes.UP, goog.events.KeyCodes.W
+                    board.move(0,-1)
+               when goog.events.KeyCodes.SPACE, goog.events.KeyCodes.K
+                    board.swap()
      ))
      
      director.replaceScene scene
