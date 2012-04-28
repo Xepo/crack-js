@@ -23,7 +23,7 @@ colorKeys = (key for key, value of colors)
 randomColor = () ->
           colorKeys[Math.floor(Math.random()*4)]
 
-animationLength = 0.7
+animationLength = 0.15
 class World
      constructor: (@scene, @width=6, @height=10) ->
           @pxwidth = 512
@@ -96,7 +96,7 @@ class Cell
           #@animation = new lime.animation.MoveTo(@world.translatex(@x), @world.translatey(@y))
           #@animation.setDuration(animationLength)
           #@limeobj.runAction(@animation)
-          console.log (@limeobj.getPosition() + " animating to " + @world.translatex(@x) + "," + @world.translatey(@y))
+          #console.log (@limeobj.getPosition() + " animating to " + @world.translatex(@x) + "," + @world.translatey(@y))
 
      animateMatch: ->
           @state = state_disappearing
@@ -235,7 +235,6 @@ class Board
 
           if affected.length > 0
                upd = (t) =>
-                    console.log affected.join()
                     for pos in affected
                          [y,x] = pos
                          @grid[y][x].resetPosition()
