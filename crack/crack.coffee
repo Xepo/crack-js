@@ -28,6 +28,12 @@ randomColor = (allowBlank=false) ->
      else
           colorKeys[Math.floor(Math.random()*(numberOfColors-1)+1)]
 
+any = (l) ->
+     for i in [0..l.length]
+          if l[i]
+               return true
+     return false
+
 animationLength = 0.15
 
 class World
@@ -101,16 +107,17 @@ class Cell
           newco = new goog.math.Coordinate(@world.translatex(@x), @world.translatey(@y))
           if not goog.math.Coordinate.equals(newco, @limeobj.getPosition())
                @stopSuperfluousAnimations()
-               @state = state_swapping
                @animation = new lime.animation.MoveTo(@world.translatex(@x), @world.translatey(@y))
                @animation.setDuration(animationLength)
                @animation.setEasing(easing)
                @limeobj.runAction(@animation)
 
      animateFall: ->
+          @state = state_falling
           @animateMove(lime.animation.Easing.LINEAR)
 
      animateSwap: ->
+          @state = state_swapping
           @animateMove(lime.animation.Easing.EASE)
           #@animation = new lime.animation.MoveTo(@world.translatex(@x), @world.translatey(@y))
           #@animation.setDuration(animationLength)
@@ -130,6 +137,7 @@ class Cell
                @advanceanimation = new lime.animation.ColorTo(redC,greenC,blueC)
                @advanceanimation.setDuration(animationLength)
                @limeobj.runAction(@advanceanimation)
+               lime.scheduleManager.callAfter((=> @setColor(@color)), this, animationLength * 1000);
 
      doMatch: ->
           @state = state_swapping
@@ -137,32 +145,35 @@ class Cell
           @animation = new lime.animation.FadeTo(0)
           @animation.setDuration(animationLength)
           @limeobj.runAction(@animation)
+          lime.scheduleManager.callAfter((=> @setColor(@color)), this, animationLength * 1000);
 
      isReady: ->
           @state == state_ready
 
      swapNow: (other) ->
+          @stopSuperfluousAnimations()
+          other.stopSuperfluousAnimations()
           [@limeobj, other.limeobj] = [other.limeobj, @limeobj]
           temp = @color
           @setColor other.color
           other.setColor temp
-          @stopSuperfluousAnimations()
-          other.stopSuperfluousAnimations()
 
      swapWith: (other) ->
           if other.isReady() and @isReady()
+               @stopSuperfluousAnimations()
+               other.stopSuperfluousAnimations()
                [@limeobj, other.limeobj] = [other.limeobj, @limeobj]
                temp = @color
                @setColor other.color
                other.setColor temp
-               @stopSuperfluousAnimations()
-               other.stopSuperfluousAnimations()
 
                other.animateSwap()
                @animateSwap()
 
      fallFrom: (other) ->
           if other.isReady() and @isReady()
+               @stopSuperfluousAnimations()
+               other.stopSuperfluousAnimations()
                [@limeobj, other.limeobj] = [other.limeobj, @limeobj]
 
                @color = other.color
@@ -289,10 +300,16 @@ class Board
           #@grid[y2][x2].move(x1, y1)
           #[@grid[y1][x1], @grid[y2][x2]] = [@grid[y2][x2], @grid[y1][x1]]
 
+     canFall: (x,y) ->
+          if y < @world.height and not @grid[y][x].isEmpty() and @grid[y][x].isReady() and @grid[y+1][x].isEmpty() and @grid[y+1][x].isReady()
+               true
+          else
+               false
+
      fall: (x) ->
           ret = []
           for y in [@world.height-1..0]
-               if (@grid[y+1][x].isEmpty()) and not @grid[y][x].isEmpty() and @grid[y+1][x].isReady() and @grid[y][x].isReady()
+               if @canFall(x,y)
                     moving=true
                if moving
                     ret.push([y+1, x])
@@ -316,16 +333,20 @@ class Board
           @grid[y1][x1].isReady() and @grid[y2][x2].isReady() and @grid[y3][x3].isReady() and @grid[y1][x1].matches(@grid[y2][x2]) and @grid[y1][x1].matches(@grid[y3][x3])
 
 
-     checkForMatch: ->
+     checkForMatch: (lastStates) ->
           matchGrid = ((false for x in [0..@world.width]) for y in [0..@world.height])
           affected = []
           for x in [0..@world.width]
                for y in [0..@world.height]
                     @grid[y][x].resetPosition()
-                    if x - 2 >= 0 and @matches(x,y,x-1,y,x-2,y)
-                         matchGrid[y][x-ax] = true for ax in [0..2]
-                    if y - 2 >= 0 and @matches(x,y,x,y-1,x,y-2)
-                         matchGrid[y-ay][x] = true for ay in [0..2]
+                    if x - 2 >= 0
+                         falling = lastStates? and any((lastStates[y][x-ax] == state_falling and @canFall(x-ax,y)) for ax in [0..2])
+                         if @matches(x,y,x-1,y,x-2,y) and not falling
+                              matchGrid[y][x-ax] = true for ax in [0..2]
+                    if y - 2 >= 0
+                         falling = lastStates? and any((lastStates[y-ay][x] == state_falling and @canFall(x,y-ay)) for ay in [0..2])
+                         if @matches(x,y,x,y-1,x,y-2) and not falling
+                              matchGrid[y-ay][x] = true for ay in [0..2]
 
           changed = false
           for x in [0..@world.width]
@@ -342,11 +363,12 @@ class Board
                @animating = true
                upd = (t) =>
                     @animating = false
+                    lastStates = (@grid[y][x].state for x in [0..@world.width] for y in [0..@world.height])
                     for pos in affected
                          [y,x] = pos
                          @grid[y][x].resetPosition()
                          @grid[y][x].state = state_ready
-                    @checkForMatch()
+                    @checkForMatch(lastStates)
 
                lime.scheduleManager.callAfter(upd, this, animationLength*1000)
           changed
