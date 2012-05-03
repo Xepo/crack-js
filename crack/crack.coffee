@@ -94,11 +94,13 @@ class Cell
                @animation.stop()
           @limeobj.setPosition(@world.translatex(@x), @world.translatey(@y))
           @state = state_ready
-          @setColor @color
+
+          #@setColor @color
 
      animateMove: (easing) ->
           newco = new goog.math.Coordinate(@world.translatex(@x), @world.translatey(@y))
           if not goog.math.Coordinate.equals(newco, @limeobj.getPosition())
+               @stopSuperfluousAnimations()
                @state = state_swapping
                @animation = new lime.animation.MoveTo(@world.translatex(@x), @world.translatey(@y))
                @animation.setDuration(animationLength)
@@ -115,15 +117,19 @@ class Cell
           #@limeobj.runAction(@animation)
           #console.log (@limeobj.getPosition() + " animating to " + @world.translatex(@x) + "," + @world.translatey(@y))
 
+     stopSuperfluousAnimations: ->
+          if @advanceanimation?
+               @advanceanimation.stop()
+               @setColor(@color)
      animateAdvance: ->
           if @isReady()
                [redC, greenC, blueC] = @getObjColor(false)
                @limeobj.setFill redC,greenC,blueC
                
                [redC,greenC,blueC] = @getObjColor(true)
-               animation = new lime.animation.ColorTo(redC,greenC,blueC)
-               animation.setDuration(animationLength)
-               @limeobj.runAction(animation)
+               @advanceanimation = new lime.animation.ColorTo(redC,greenC,blueC)
+               @advanceanimation.setDuration(animationLength)
+               @limeobj.runAction(@advanceanimation)
 
      doMatch: ->
           @state = state_swapping
@@ -140,6 +146,8 @@ class Cell
           temp = @color
           @setColor other.color
           other.setColor temp
+          @stopSuperfluousAnimations()
+          other.stopSuperfluousAnimations()
 
      swapWith: (other) ->
           if other.isReady() and @isReady()
@@ -147,6 +155,8 @@ class Cell
                temp = @color
                @setColor other.color
                other.setColor temp
+               @stopSuperfluousAnimations()
+               other.stopSuperfluousAnimations()
 
                other.animateSwap()
                @animateSwap()
@@ -243,8 +253,6 @@ class Board
                for y in [0..@world.height+2]
                     for x in [0..@world.width]
                          @grid[y][x].swapNow(@grid[y+1][x])
-               for x in [0..@world.width]
-                    @grid[@world.height][x].animateAdvance()
                @selection.y-=1
                @world.raisey += @world.blocksizey
 
@@ -253,6 +261,8 @@ class Board
                for x in [0..@world.width]
                     @grid[y][x].resetPosition()
           if advanced
+               for x in [0..@world.width]
+                    @grid[@world.height][x].animateAdvance()
                @newNextRow()
                @checkForMatch()
 
