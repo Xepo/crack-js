@@ -8,6 +8,7 @@ goog.require "lime.Circle"
 goog.require "lime.Label"
 goog.require "lime.animation.Spawn"
 goog.require "lime.animation.FadeTo"
+goog.require "lime.animation.ColorTo"
 goog.require "lime.animation.ScaleTo"
 goog.require "lime.animation.MoveTo"
 goog.require "goog.asserts"
@@ -64,12 +65,21 @@ class Cell
 
           @state = state_ready
 
-     setColor: (@color) ->
+     getObjColor: (isActive=(@y <= @world.height)) ->
           [redC,greenC,blueC] = colors[@color]
+          if not isActive
+               redC -= 90
+               greenC -= 90
+               blueC -= 90
+          [redC, greenC, blueC]
+
+     setColor: (@color) ->
+          [redC, greenC, blueC] = @getObjColor()
           if @color == blankColor
                @limeobj.setFill redC,greenC,blueC,1
                @limeobj.setFill redC,greenC,blueC,0
           else
+               @limeobj.setOpacity 1
                @limeobj.setFill redC,greenC,blueC,1
 
 
@@ -84,6 +94,7 @@ class Cell
                @animation.stop()
           @limeobj.setPosition(@world.translatex(@x), @world.translatey(@y))
           @state = state_ready
+          @setColor @color
 
      animateMove: (easing) ->
           newco = new goog.math.Coordinate(@world.translatex(@x), @world.translatey(@y))
@@ -104,9 +115,23 @@ class Cell
           #@limeobj.runAction(@animation)
           #console.log (@limeobj.getPosition() + " animating to " + @world.translatex(@x) + "," + @world.translatey(@y))
 
-     animateMatch: ->
-          @state = state_disappearing
-          animation = new lime.animation.FadeTo(0)
+     animateAdvance: ->
+          if @isReady()
+               [redC, greenC, blueC] = @getObjColor(false)
+               @limeobj.setFill redC,greenC,blueC
+               
+               [redC,greenC,blueC] = @getObjColor(true)
+               animation = new lime.animation.ColorTo(redC,greenC,blueC)
+               animation.setDuration(animationLength)
+               @limeobj.runAction(animation)
+
+     doMatch: ->
+          @state = state_swapping
+          @color = blankColor
+          @animation = new lime.animation.FadeTo(0)
+          @animation.setDuration(animationLength)
+          @limeobj.runAction(@animation)
+
      isReady: ->
           @state == state_ready
 
@@ -181,10 +206,16 @@ class Board
                          @grid[y][x].setColor(randomColor(y < @world.height))
 
           @advanceAmt = 0.0
+          @animating = 0
 
           @selection = new Selection(@world)
           @selection.set(0,@world.height)
           console.log "Constructed"
+
+     advanceUntilStatic: ->
+          if @checkForMatch()
+               @reposition()
+               @advanceUntilStatic()
 
      anyNonBlank: (row) ->
           for x in [0..@world.width]
@@ -202,7 +233,9 @@ class Board
           lime.scheduleManager.unschedule @advance, this
 
      reposition: ->
-          advanced = @world.raisey < -@world.blocksizey
+          if @animating
+               return
+          advanced = (@world.raisey < -@world.blocksizey)
           if advanced
                if @anyNonBlank(@grid[0])
                     @endGame()
@@ -210,23 +243,26 @@ class Board
                for y in [0..@world.height+2]
                     for x in [0..@world.width]
                          @grid[y][x].swapNow(@grid[y+1][x])
+               for x in [0..@world.width]
+                    @grid[@world.height][x].animateAdvance()
                @selection.y-=1
                @world.raisey += @world.blocksizey
-               @newNextRow()
 
           @selection.resetPosition()
           for y in [@world.height+3..0]
                for x in [0..@world.width]
                     @grid[y][x].resetPosition()
           if advanced
+               @newNextRow()
                @checkForMatch()
 
      advance: (t) ->
-          @advanceAmt += t
-          if @advanceAmt >= 100.0
-               @world.raisey -= @advanceAmt / 100.0
-               @advanceAmt = 0.0
-               @reposition()
+          if not @animating
+               @advanceAmt += t
+               if @advanceAmt >= 100.0
+                    @world.raisey -= @advanceAmt / 100.0
+                    @advanceAmt = 0.0
+                    @reposition()
 
      randomRow: (y) ->
           (new Cell(@world, randomColor(), x, y) for x in [0..@world.width])
@@ -286,13 +322,16 @@ class Board
                for y in [0..@world.height]
                     if matchGrid[y][x]
                          changed = true
-                         @grid[y][x].setColor(blankColor)
+                         @grid[y][x].doMatch()
+                         affected.push [y,x]
           for x in [0..@world.width]
                affected = affected.concat(@fall(x))
 
 
           if affected.length > 0
+               @animating = true
                upd = (t) =>
+                    @animating = false
                     for pos in affected
                          [y,x] = pos
                          @grid[y][x].resetPosition()
@@ -300,6 +339,7 @@ class Board
                     @checkForMatch()
 
                lime.scheduleManager.callAfter(upd, this, animationLength*1000)
+          changed
 
 runTest = ->
      scene = new lime.Scene()
