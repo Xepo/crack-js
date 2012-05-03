@@ -13,17 +13,22 @@ goog.require "lime.animation.MoveTo"
 goog.require "goog.asserts"
 
 colors =
+     empty: [255,255,255]
      red: [255,0,0]
      green: [0,255,0]
      blue: [0,0,255]
-     empty: [255,255,255]
+numberOfColors = Object.keys(colors).length
 
 blankColor = "empty"
 colorKeys = (key for key, value of colors)
-randomColor = () ->
-          colorKeys[Math.floor(Math.random()*4)]
+randomColor = (allowBlank=false) ->
+     if allowBlank
+          colorKeys[Math.floor(Math.random()*numberOfColors)]
+     else
+          colorKeys[Math.floor(Math.random()*(numberOfColors-1)+1)]
 
 animationLength = 0.15
+
 class World
      constructor: (@scene, @width=6, @height=10) ->
           @pxwidth = 512
@@ -31,12 +36,13 @@ class World
           @target = new lime.Layer().setPosition(0, 0).setSize(@pxwidth, @pxheight)
           @blocksizex = @pxwidth / @width
           @blocksizey = @pxheight / @height
+          @raisey = 0
           @scene.appendChild @target
 
      translatex: (x) ->
           x * @blocksizex
      translatey: (y) ->
-          y * @blocksizey
+          (y * @blocksizey) + @raisey
 
      appendChild: (child) ->
           @target.appendChild child
@@ -104,6 +110,12 @@ class Cell
      isReady: ->
           @state == state_ready
 
+     swapNow: (other) ->
+          [@limeobj, other.limeobj] = [other.limeobj, @limeobj]
+          temp = @color
+          @setColor other.color
+          other.setColor temp
+
      swapWith: (other) ->
           if other.isReady() and @isReady()
                [@limeobj, other.limeobj] = [other.limeobj, @limeobj]
@@ -143,11 +155,13 @@ class Selection
           @limeobj.setStroke(2, 'rgb(0,0,0)')
           @world.appendChild @limeobj
 
+     resetPosition: ->
+          @limeobj.setPosition @world.translatex(@x),@world.translatey(@y)
      set: (x,y) ->
           if x >= 0 and x < @world.width and y >= 0 and y <= @world.height
                @x = x
                @y = y
-               @limeobj.setPosition @world.translatex(x),@world.translatey(y)
+               @resetPosition()
 
 
 
@@ -160,15 +174,59 @@ class Board
                     @grid[y+1][x]
                else
                     null
-          @grid = (@emptyRow(y) for y in [0..@world.height])
-          for y in [@world.height..0]
+          @grid = (@emptyRow(y) for y in [0..@world.height+3])
+          for y in [@world.height+3..0]
                for x in [0..@world.width]
-                    if (y == @world.height) or (not @grid[y+1][x].isEmpty())
-                         @grid[y][x].setColor(randomColor())
+                    if (y >= @world.height) or (not @grid[y+1][x].isEmpty())
+                         @grid[y][x].setColor(randomColor(y < @world.height))
+
+          @advanceAmt = 0.0
 
           @selection = new Selection(@world)
           @selection.set(0,@world.height)
           console.log "Constructed"
+
+     anyNonBlank: (row) ->
+          for x in [0..@world.width]
+               if not row[x].isEmpty()
+                    return true
+          return false
+     newNextRow: ->
+          if @anyNonBlank(@grid[@world.height+3])
+               console.log("ERROR!")
+          for x in [0..@world.width]
+               @grid[@world.height+3][x].setColor(randomColor(false))
+
+     endGame: ->
+          console.log "Lost!"
+          lime.scheduleManager.unschedule @advance, this
+
+     reposition: ->
+          advanced = @world.raisey < -@world.blocksizey
+          if advanced
+               if @anyNonBlank(@grid[0])
+                    @endGame()
+                    return
+               for y in [0..@world.height+2]
+                    for x in [0..@world.width]
+                         @grid[y][x].swapNow(@grid[y+1][x])
+               @selection.y-=1
+               @world.raisey += @world.blocksizey
+               @newNextRow()
+
+          @selection.resetPosition()
+          for y in [@world.height+3..0]
+               for x in [0..@world.width]
+                    @grid[y][x].resetPosition()
+          if advanced
+               @checkForMatch()
+
+     advance: (t) ->
+          @advanceAmt += t
+          if @advanceAmt >= 100.0
+               @world.raisey -= @advanceAmt / 100.0
+               @advanceAmt = 0.0
+               @reposition()
 
      randomRow: (y) ->
           (new Cell(@world, randomColor(), x, y) for x in [0..@world.width])
@@ -241,7 +299,6 @@ class Board
                          @grid[y][x].state = state_ready
                     @checkForMatch()
 
-
                lime.scheduleManager.callAfter(upd, this, animationLength*1000)
 
 runTest = ->
@@ -279,6 +336,8 @@ crack.start = ->
      scene = new lime.Scene()
      world = new World(scene)
      board = new Board(world)
+
+     lime.scheduleManager.schedule(board.advance, board)
 
      goog.events.listen(document, ['keydown'], ((e) ->
           switch e.keyCode
